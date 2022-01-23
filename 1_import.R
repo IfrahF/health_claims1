@@ -35,7 +35,22 @@ sqldf("SELECT COUNT(DISTINCT(Person))
 
 
 ## How many ER visits results in a COVID positive
-
+sqldf("SELECT COUNT(ICD10)
+      FROM med_2020
+      WHERE ICD10 = 'U07.1'")
 
 ## How many total ER visits occurred where people got tested for COVID (positive or negative)
+sqldf("SELECT COUNT(ICD10)
+      FROM med_2020
+      WHERE ICD10 IN ('Z03.818', 'Z20.828')")
+
+## Positive/Negative cases by CPT codes:
+cpt = med_2020 %>%
+  select(ICD10, CPT4, Person) %>%
+  filter(CPT4 == 86328 | CPT4 == 86769 | CPT4 == 87635) %>%
+  mutate(test = if_else(ICD10 == "U07.1", "positive", "negative")) %>%
+  distinct(ICD10, CPT4, Person, test)
+
+
+
 
