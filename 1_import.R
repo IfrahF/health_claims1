@@ -4,6 +4,7 @@ library(sqldf)
 
 med_2020 = read_xlsx("Medical 2020.xlsx")
 rx_2020 = read_xlsx("Rx 2020.xlsx")
+hris = read_xlsx("HRIS.xlsx")
 
 
 ## Aggregate cost by type of visit
@@ -11,11 +12,11 @@ aggregate(med_2020$cost, by = list(Category = med_2020$tos), FUN = sum)
 
 
 ## Give count of ER visit by person
-ER_visits = med_2020 %>% filter(ER == 1) %>% count(Person, From, ER) %>% 
-  select(-n) %>% group_by(Person, ER) %>%
+ER_visits = med_2020 %>% filter(ER == 1) %>% count(Person, From) %>% 
+  select(-n) %>% group_by(Person) %>%
   summarize(
     total_ER_visits = n()
-  )  %>% select(-ER)
+  )  
 
 sqldf("SELECT SUM(total_ER_visits) 
       FROM ER_visits")
@@ -35,22 +36,74 @@ sqldf("SELECT COUNT(DISTINCT(Person))
 
 
 ## How many ER visits results in a COVID positive
-sqldf("SELECT COUNT(ICD10)
-      FROM med_2020
-      WHERE ICD10 = 'U07.1'")
+
 
 ## How many total ER visits occurred where people got tested for COVID (positive or negative)
-sqldf("SELECT COUNT(ICD10)
-      FROM med_2020
-      WHERE ICD10 IN ('Z03.818', 'Z20.828')")
+
 
 ## Positive/Negative cases by CPT codes:
-cpt = med_2020 %>%
-  select(ICD10, CPT4, Person) %>%
-  filter(CPT4 == 86328 | CPT4 == 86769 | CPT4 == 87635) %>%
-  mutate(test = if_else(ICD10 == "U07.1", "positive", "negative")) %>%
-  distinct(ICD10, CPT4, Person, test)
 
+
+
+## ER visits by relation
+a = med_2020 %>%
+  filter(ER == 1) %>% distinct(Person, From, cost, Relcode) %>% 
+  group_by(Person, From, Relcode) %>%
+  summarize(
+    total_cost = sum(cost)
+  ) %>% filter(total_cost > 0)
+
+sqldf("SELECT COUNT(Person), Relcode 
+      FROM a
+      GROUP BY Relcode")
+
+
+## ER visits by age group
+b = med_2020 %>%
+  filter(ER == 1) %>% distinct(Person, From, cost, `Age Range`) %>% 
+  group_by(Person, From, `Age Range`) %>%
+  summarize(
+    total_cost = sum(cost)
+  ) %>% filter(total_cost > 0)
+
+sqldf("SELECT COUNT(Person), `Age Range` 
+      FROM b
+      GROUP BY `Age Range`")
+
+## merging
+merged = med_2020 %>% filter(ER == 1) %>% count(Person, From, cost, EE) %>% 
+  select(-n) %>% group_by(Person, From, EE) %>%
+  summarize(
+    total_cost = sum(cost)
+  ) %>% filter(total_cost > 0) %>%
+  left_join(hris, by = "EE") %>%
+  janitor::clean_names()
+
+sqldf("SELECT COUNT(person_x) AS persons, Nurse 
+      FROM merged
+      GROUP BY Nurse")
+
+## Repeat ER visits
+repeated = med_2020 %>% filter(ER == 1) %>% count(Person, cost, EE) %>%
+  filter(n > 1) %>% group_by(Person, EE) %>%
+  summarize(
+    total_cost = sum(cost)
+  ) %>% filter(total_cost > 0) %>%
+  left_join(hris, by = "EE") %>%
+  janitor::clean_names()
+
+sqldf("SELECT COUNT(person_x) AS persons, Nurse 
+      FROM repeated
+      GROUP BY Nurse")
+
+
+## CPT4 that start with J by type of service
+query = med_2020 %>% filter(str_detect(CPT4, "^J")) %>%
+  janitor::clean_names()
+
+sqldf("SELECT COUNT(person) AS persons, tos 
+      FROM query
+      GROUP BY tos")
 
 
 
