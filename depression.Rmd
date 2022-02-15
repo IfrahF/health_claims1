@@ -5,103 +5,115 @@ date: "2/14/2022"
 output: html_document
 ---
 
+<!-- big picture of the class of drugs - is depression important -->
+<!-- take them under focus - total cost for people who took mental health services -->
+<!-- 15% paid by employee, 85% by employer -->
+
+
 ```{r setup, include=FALSE}
 library(tidyverse)
 library(readxl)
 library(sqldf)
 
-med_2020 = read_xlsx("Medical 2020.xlsx")
-rx_2020 = read_xlsx("Rx 2020.xlsx")
-hris = read_xlsx("HRIS.xlsx")
-risk = read_xlsx("Risk 2020.xlsx")
+med_2020 = read_xlsx("Medical 2020.xlsx") %>%
+  janitor::clean_names()
+rx_2020 = read_xlsx("Rx 2020.xlsx") %>%
+  janitor::clean_names()
+hris = read_xlsx("HRIS.xlsx") %>%
+  janitor::clean_names()
+risk = read_xlsx("Risk 2020.xlsx") %>%
+  janitor::clean_names()
+
 ```
 
 ## ICD-10 filtering
 ```{r}
 depression = med_2020 %>% 
-  mutate(keep = ifelse((str_detect(ICD10, paste(c("^F32", "^F33", "F03.90", "F34.1", "F43.21", "F06.31", "F06.32", "F25.1", "^F41", "R45.851"), collapse = "|"))),1,
-                       ifelse((str_detect(CPT4, paste(c(as.character(99201:99205, 99211:99215, 90791, 90792, 90834, 90837, 90847)), collapse = "|"))),1,0))) %>%
+  mutate(keep = ifelse((str_detect(icd10, paste(c("^F32", "^F33", "F03.90", "F34.1", "F43.21", "F06.31", "F06.32", "F25.1", "^F41", "R45.851"), collapse = "|"))),1,
+                       ifelse((str_detect(cpt4, paste(c(as.character(99201:99205, 99211:99215, 90791, 90792, 90834, 90837, 90847)), collapse = "|"))),1,0))) %>%
   filter(keep == 1) %>%
-  group_by(Person, From, To) %>%
+  group_by(person, from, to) %>%
   mutate(total_cost = sum(cost)) %>% 
   filter(total_cost > 0) %>%
-  distinct(Person, From, To, .keep_all = TRUE) %>% 
+  distinct(person, from, to, .keep_all = TRUE) %>% 
   ungroup()
 ```
 
 ## Unique people
 ```{r}
-people = sqldf("SELECT DISTINCT(Person), Gender, [Age Range]
+people = sqldf("SELECT DISTINCT(person), gender, age_range
                FROM depression")
 ```
 
 ## ER Visit
 ```{r}
 er_visits = depression %>%
-  filter(ER == 1)
+  filter(er == 1)
 ```
 
 ## Gender
 ```{r}
-sqldf("SELECT COUNT(Person), Gender
+sqldf("SELECT COUNT(person), gender
       FROM people
-      GROUP BY Gender")
+      GROUP BY gender")
 ```
 
 ## Age Range
 ```{r}
-sqldf("SELECT COUNT(Person), [Age Range]
+sqldf("SELECT COUNT(person), age_range
       FROM people
-      GROUP BY [Age Range]")
+      GROUP BY age_range")
 ```
 
 ## POS
 ```{r}
-sqldf("SELECT COUNT(Person), POS
+sqldf("SELECT COUNT(person), pos
       FROM depression
-      GROUP BY POS")
+      GROUP BY pos")
 ```
 
 ## PCP Visit
 ```{r}
-sqldf("SELECT COUNT(Person), PCP
+sqldf("SELECT COUNT(person), pcp
       FROM depression
-      WHERE PCP == 'Y'
-      GROUP BY PCP")
+      WHERE pcp == 'Y'
+      GROUP BY pcp")
 ```
 
 ## Length of stay
 ```{r}
 los = depression %>%
-  mutate(duration = To - From)
+  mutate(duration = to - from)
 ```
 
 ## Summary Statistics
 ```{r}
-table(los$"Age Range", los$POS)
+table(los$age_range, los$pos)
 ```
 
 ## RX
 ```{r}
-supply = sqldf("SELECT DISTINCT Person, SUM(Days) AS supply, Class
+supply = sqldf("SELECT DISTINCT person, SUM(days) AS supply, class
        FROM rx_2020
-       WHERE Class IN ('ANTIANXIETY AGENTS', 'ANTIDEPRESSANTS') AND Units > 0
-       GROUP BY Person, Class")
+       WHERE class IN ('ANTIANXIETY AGENTS', 'ANTIDEPRESSANTS') AND Units > 0
+       GROUP BY person, class")
 ```
 
 ## Merge (drugs and med)
 ```{r}
 both = depression %>%
-  inner_join(supply, by = "Person") %>%
-  distinct(Person, .keep_all = T)
+  inner_join(supply, by = "person") %>%
+  distinct(person, .keep_all = T)
 ```
 
 ## Merge (all people)
 ```{r}
 all_people = depression %>%
-  full_join(supply, by = "Person") %>%
-  distinct(Person, .keep_all = T)
+  full_join(supply, by = "person") %>%
+  distinct(person, .keep_all = T)
 ```
+
+
 
 
 

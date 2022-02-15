@@ -5,7 +5,12 @@ library(sqldf)
 med_2020 = read_xlsx("Medical 2020.xlsx")
 rx_2020 = read_xlsx("Rx 2020.xlsx")
 hris = read_xlsx("HRIS.xlsx")
-risk = read_xlsx("Risk 2020.xlsx")
+risk = read_xlsx("Risk 2020.xlsx") %>%
+  janitor::clean_names()
+hosp = read_xlsx("hospital 2020.xlsx") %>%
+  janitor::clean_names()
+bio = read_xlsx("Biometricsx 2020.xlsx") %>%
+  janitor::clean_names()
 
 ## Aggregate cost by type of visit
 aggregate(med_2020$cost, by = list(Category = med_2020$tos), FUN = sum)
@@ -164,6 +169,9 @@ sqldf("SELECT SUM(employee) AS total_employees_t20, nurse
        FROM hris
        GROUP BY nurse")
 
+sqldf("SELECT SUM(members) AS total_members_t20
+       FROM hris")
+
 sqldf("SELECT SUM(members) AS total_members_t20, nurse
        FROM hris
        GROUP BY nurse")
@@ -186,12 +194,6 @@ sqldf("SELECT COUNT(person_x) AS total_people, nurse
 sqldf("SELECT COUNT(DISTINCT(person_x)) AS total_people, nurse
        FROM repeated
        GROUP BY nurse")
-
-51/122 
-109/394
-
-100/240 
-267/783
 
 
 # Opioid
@@ -228,6 +230,44 @@ sqldf("SELECT supply_range, COUNT(Person) AS total_people
 ## Has diabetes and hypertension with a risk score of 7
 ## Also has PSYCHOTHERAPEUTIC AND NEUROLOGICAL AGENTS prescriptions
 ## Has Chronic pain syndrome (G89.4) and Polyneuropathy (G62.9) so he is in a lot of pain
+
+
+## People with risk score over 10
+sqldf("SELECT COUNT(DISTINCT(person)) AS risky_people 
+      FROM risk
+      WHERE risk_score > 10")
+
+## People with BMI over 26
+sqldf("SELECT COUNT(DISTINCT(person)) AS high_bmi
+      FROM bio
+      WHERE bmi > 26")
+
+pain_med = sqldf("SELECT COUNT(DISTINCT(Person)) AS people_in_pain
+       FROM rx_2020
+       WHERE Class IN ('ANALGESICS - OPIOID', 'ANALGESICS - ANTI-INFLAMMATORY', 'ANALGESICS - NONNARCOTIC')")
+
+tot_adm = hosp %>%
+  distinct(person, from, .keep_all = T)
+
+sqldf("SELECT SUM(los) AS total_los
+      FROM hosp")
+
+nurses = hosp %>% 
+  inner_join(hris, by = "person") %>%
+  filter(nurse == "Y") %>%
+  summarise(
+    los = sum(los)
+  )
+
+# Nurse admission rate = 5/240 = 2.08%
+# Non-nurse admission rate = 8/783 = 1.02%
+
+riskxhosp = hosp %>% 
+  inner_join(risk, by = "person") %>%
+  filter(risk_score > 10) %>%
+  summarise(
+    los = sum(los)
+  )
 
 
 
