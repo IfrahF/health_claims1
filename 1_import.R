@@ -139,3 +139,96 @@ correct_er = med_2020 %>%
    filter(CPT4 %in% c(99281, 99282, 99283, 99284, 99285)) %>%
    distinct(Person, From, .keep_all = TRUE) 
 
+
+# number of employees and number of members for nurses and non
+sqldf("SELECT COUNT(Person) AS total_employees_t20
+       FROM hris
+       GROUP BY T2020")
+
+sqldf("SELECT COUNT(Person) AS total_employees_t19
+       FROM hris
+       GROUP BY T2019")
+
+sqldf("SELECT COUNT(Person) AS total_employees_t18
+       FROM hris
+       GROUP BY T2018")
+  
+hris = hris %>%
+  janitor::clean_names() %>%
+  mutate(employee = if_else(t2020 %in% c(1, 2, 3), 1, 0)) %>%
+  mutate(members = if_else(t2020 == 1, 1, 
+                           if_else(t2020 %in% c(2, 3), 2, 
+                                   if_else(t2020 == 4, 4, 0))))
+
+sqldf("SELECT SUM(employee) AS total_employees_t20, nurse
+       FROM hris
+       GROUP BY nurse")
+
+sqldf("SELECT SUM(members) AS total_members_t20, nurse
+       FROM hris
+       GROUP BY nurse")
+
+#number of nurse and non-nurse ER visits. divide by membership to see who had the higher rate of ER visits
+repeated = med_2020 %>% filter(ER == 1) %>% 
+  count(Person, cost, From, EE) %>%
+  group_by(Person, From) %>%
+  mutate(total_cost = sum(cost)) %>% 
+  filter(total_cost > 0) %>%
+  distinct(Person, From, .keep_all = TRUE)  %>%
+  janitor::clean_names() %>%
+  left_join(hris, by = "ee") %>%
+  janitor::clean_names()
+
+sqldf("SELECT COUNT(person_x) AS total_people, nurse
+       FROM repeated
+       GROUP BY nurse")
+
+sqldf("SELECT COUNT(DISTINCT(person_x)) AS total_people, nurse
+       FROM repeated
+       GROUP BY nurse")
+
+51/122 
+109/394
+
+100/240 
+267/783
+
+
+# Opioid
+## 364 prescriptions
+## 136 people
+
+sqldf("SELECT COUNT(DISTINCT(Person)) AS total_people, Class
+       FROM rx_2020
+       GROUP BY Class")
+
+opioid = rx_2020 %>%
+  janitor::clean_names() %>%
+  mutate(supply = if_else(days < 30, 2,
+                          if_else(days < 10, 1, 0)))
+
+supply = sqldf("SELECT DISTINCT Person, SUM(Days) AS supply
+       FROM rx_2020
+       WHERE Class == 'ANALGESICS - OPIOID'
+       GROUP BY Person")
+
+supply = supply %>%
+  janitor::clean_names() %>%
+  mutate(supply_range = if_else(supply > 180, "More than 180 days",
+                          if_else(supply >= 90, "90-180 days", 
+                                  if_else(supply >= 30, "30-90 days", 
+                                          if_else(supply >= 10, "10-30 days", "Less than 10 days")))))
+
+sqldf("SELECT supply_range, COUNT(Person) AS total_people
+       FROM supply
+       GROUP BY supply_range")
+
+## 123-01 has almost 2 years supply of opioids (2 types - OXYCODONE HCL and MORPHINE SULFATE ER)
+## 55+ year old male
+## Has diabetes and hypertension with a risk score of 7
+## Also has PSYCHOTHERAPEUTIC AND NEUROLOGICAL AGENTS prescriptions
+## Has Chronic pain syndrome (G89.4) and Polyneuropathy (G62.9) so he is in a lot of pain
+
+
+
+
