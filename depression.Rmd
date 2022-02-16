@@ -14,6 +14,7 @@ output: html_document
 library(tidyverse)
 library(readxl)
 library(sqldf)
+library(plotly)
 
 med_2020 = read_xlsx("Medical 2020.xlsx") %>%
   janitor::clean_names()
@@ -25,6 +26,12 @@ risk = read_xlsx("Risk 2020.xlsx") %>%
   janitor::clean_names()
 
 ```
+
+```{r}
+all_depressed = med_2020 %>%
+  str_detect(icd10, "^F", keep = 1) 
+```
+
 
 ## ICD-10 filtering
 ```{r}
@@ -112,6 +119,88 @@ all_people = depression %>%
   full_join(supply, by = "person") %>%
   distinct(person, .keep_all = T)
 ```
+
+## Pie for people on depression meds
+```{r}
+meds = sqldf("SELECT COUNT(DISTINCT(person)) AS total_people, class
+       FROM rx_2020
+       GROUP BY class")
+  
+  
+dep_med = sqldf("SELECT total_people, class
+       FROM meds
+       ORDER BY total_people DESC
+       LIMIT 5") 
+
+others = sqldf("SELECT total_people, class
+       FROM meds
+       ORDER BY total_people
+       LIMIT 74") 
+
+others = sqldf("SELECT SUM(total_people) AS total_people
+        FROM others") %>%
+  mutate(class = "OTHERS")
+
+pie_med = rbind(dep_med, others)
+
+ggplot(pie_med, aes(x = "", y = total_people, fill = class)) +
+  geom_bar(width = 1, stat = "identity", color = "white") +
+  coord_polar("y", start = 0) +
+  theme_void()
+
+```
+
+## Supply of drugs
+```{r}
+supply = sqldf("SELECT class, SUM(Days) AS supply
+       FROM rx_2020
+       GROUP BY class
+       HAVING supply > 0")
+
+dep_supply = sqldf("SELECT supply, class
+       FROM supply
+       ORDER BY supply DESC
+       LIMIT 5") 
+
+anxiety = sqldf("SELECT supply, class
+       FROM supply
+       WHERE class == 'ANTIANXIETY AGENTS'")
+
+other_supply = sqldf("SELECT supply, class
+       FROM supply
+       ORDER BY supply
+       LIMIT 73") 
+
+other_supply = sqldf("SELECT SUM(supply) AS supply
+        FROM other_supply") %>%
+  mutate(class = "OTHERS")
+
+other_supply = mutate(supply = supply - 10093)
+
+med_supply = rbind(dep_supply, anxiety, other_supply) %>%
+  mutate(perc = `supply` / sum(`supply`)) %>% 
+  mutate(labels = scales::percent(perc))
+
+pie(med_supply$supply, med_supply$class)
+
+ggplot(med_supply, aes(x = "", y = supply, fill = class)) +
+  geom_bar(width = 1, stat = "identity", color = "white") +
+  coord_polar("y", start = 0) +
+  theme_void()
+
+ggplot(med_supply, aes(x = "", y = perc, fill = class)) +
+  geom_col(color = "black") +
+  geom_label(aes(label = labels),
+            position = position_stack(vjust = 0.5),
+            show.legend = FALSE) +
+  guides(fill = guide_legend(title = "Class")) +
+  scale_fill_viridis_d() +
+  coord_polar(theta = "y") + 
+  theme_void()
+```
+
+
+
 
 
 
