@@ -26,13 +26,18 @@ hris = read_xlsx("HRIS.xlsx") %>%
   janitor::clean_names()
 risk = read_xlsx("Risk 2020.xlsx") %>%
   janitor::clean_names()
-
+hosp = read_xlsx("hospital 2020.xlsx") %>%
+  janitor::clean_names()
 ```
 
 
 ## ICD-10 filtering (ALL)
 ```{r}
 all_depressed = med_2020 %>%
+  group_by(person, from, to) %>% 
+  mutate(sum_cost = sum(cost)) %>% 
+  filter(sum_cost > 0) %>% 
+  ungroup() %>%
   filter(str_detect(icd10, "^F")) %>%
   filter(!str_detect(icd10, "^F7"))
 ```
@@ -164,7 +169,9 @@ df2 <- pie_med %>%
          pos = (perc*100)/2 + lead(csum, 1),
          pos = if_else(is.na(pos), (perc*100)/2, pos))
 
-dep_ppl_pie = ggplot(pie_med, aes(x = "" , y = perc*100, fill = fct_inorder(class))) +
+#dep_ppl_pie = 
+  
+  ggplot(pie_med, aes(x = "" , y = perc*100, fill = fct_inorder(class))) +
   geom_col(width = 1, color = 1) +
   coord_polar(theta = "y") +
   scale_fill_brewer(palette = "Pastel1") +
@@ -214,21 +221,141 @@ df2 <- med_supply %>%
          pos = (perc*100)/2 + lead(csum, 1),
          pos = if_else(is.na(pos), (perc*100)/2, pos))
 
-dep_med_pie = ggplot(med_supply, aes(x = "" , y = perc*100, fill = fct_inorder(class))) +
-  geom_col(width = 1, color = 1, show.legend = FALSE) +
+#dep_med_pie = 
+  
+  ggplot(med_supply, aes(x = "" , y = perc*100, fill = fct_inorder(class))) +
+  geom_col(width = 1, color = 1) +
   coord_polar(theta = "y") +
   scale_fill_brewer(palette = "Pastel1") +
   geom_label_repel(data = df2, aes(y = pos, label = labels),
                    size = 3.5, nudge_x = 1.1, show.legend = FALSE) +
+  guides(fill = guide_legend(title = "Class")) +
   theme_void() +
   ggtitle("Breakdown of different medications by supply")
 
-plot_grid(dep_ppl_pie, dep_med_pie, nrow = 1)
+#plot_grid(dep_ppl_pie, dep_med_pie, nrow = 1)
 ```
 
 
+## Price of medications
+```{r, message=FALSE, warning=FALSE, dpi=300}
+cost = sqldf("SELECT class, SUM(cost) AS cost
+       FROM rx_2020
+       GROUP BY class
+       HAVING cost > 0")
+
+dep_cost = sqldf("SELECT cost, class
+       FROM cost
+       ORDER BY cost DESC
+       LIMIT 6") 
+
+anxiety_cost = sqldf("SELECT cost, class
+       FROM cost
+       WHERE class == 'ANTIANXIETY AGENTS'")
+
+other_cost = sqldf("SELECT cost, class
+       FROM cost
+       ORDER BY cost
+       LIMIT 72") 
+
+other_cost = sqldf("SELECT SUM(cost) AS cost
+        FROM other_cost") %>%
+  mutate(class = "OTHERS")
+
+other_cost = other_cost %>%
+  mutate(cost = cost - 10093)
+
+med_cost = rbind(dep_cost, anxiety_cost, other_cost) %>%
+  mutate(perc = `cost` / sum(`cost`)) %>% 
+  mutate(labels = scales::percent(perc)) %>%
+  mutate(class = str_to_title(class))
+
+df2 <- med_cost %>% 
+  mutate(csum = rev(cumsum(rev(perc*100))), 
+         pos = (perc*100)/2 + lead(csum, 1),
+         pos = if_else(is.na(pos), (perc*100)/2, pos))
+
+#dep_med_pie = 
+  
+  ggplot(med_cost, aes(x = "" , y = perc*100, fill = fct_inorder(class))) +
+  geom_col(width = 1, color = 1) +
+  coord_polar(theta = "y") +
+  scale_fill_brewer(palette = "Pastel1") +
+  geom_label_repel(data = df2, aes(y = pos, label = labels),
+                   size = 3.5, nudge_x = 1.1, show.legend = FALSE) +
+  guides(fill = guide_legend(title = "Class")) +
+  theme_void() +
+  ggtitle("Breakdown of different medications by cost")
+
+#plot_grid(dep_ppl_pie, dep_med_pie, nrow = 1)
+```
+
+## Nurses and non-Nurses
+```{r, message=FALSE, warning=FALSE}
+all_depressed = 
+all_depressed %>% 
+  mutate(illness = ifelse(grepl("F0", icd10), "Mental disorders due to known physiological conditions",
+                ifelse(grepl("F1", icd10), "Mental and behavioral disorders due to psychoactive subtance use",
+                ifelse(grepl("F2", icd10), "Schizophrenia, schizotypal, delusional and other mood disorders",
+                ifelse(grepl("F3", icd10), "Mood (affective) disorders",
+                ifelse(grepl("F4", icd10), "Anxiety, dissociative, stress-related, somatoform, and other nonpsychotic mental disorders",
+                ifelse(grepl("F5", icd10), "Behavioral syndromes associated with physiological disturbances and physical factors",
+                ifelse(grepl("F6", icd10), "Disorders of adult personality and behavior",
+                ifelse(grepl("F8", icd10), "Pervasive and specific developmental disorders",
+                ifelse(grepl("F9", icd10), "Behavioral and emotional disorders with onset usually occurring in childhood and adolescence", "NA"))))))))))
+
+all_depressed = all_depressed %>%
+  filter(illness == "Mood (affective) disorders") %>%
+  distinct(person, .keep_all = T)
+
+check_nurses = all_depressed %>%
+  inner_join(hris, by = "person")
+
+sqldf("SELECT nurse, COUNT()
+       FROM check_nurses
+       GROUP BY nurse")
+
+check_nurses = rx_2020 %>%
+  filter(class == 'ANTIDEPRESSANTS') %>%
+  inner_join(hris, by = "person") %>%
+  distinct(person, .keep_all = T)
+
+a = sqldf("SELECT nurse, class, COUNT() AS number
+       FROM check_nurses
+       GROUP BY nurse, class")
+
+check_nurses = rx_2020 %>%
+  filter(class == 'ANTIDEPRESSANTS') %>%
+  distinct(person, .keep_all = T)
+
+a = sqldf("SELECT rel_code, class, COUNT() AS number
+       FROM check_nurses
+       GROUP BY rel_code, class")
+
+dep_emp = rx_2020 %>%
+  filter(class == 'ANTIDEPRESSANTS') %>%
+  filter(rel_code == "E") %>%
+  inner_join(hris, by = "person") %>%
+  distinct(person, .keep_all = T)
+
+a = sqldf("SELECT nurse, COUNT() as number
+       FROM dep_emp
+       GROUP BY nurse")
 
 
+nurse_meds = rx_2020 %>%
+  inner_join(hris, by = "person") %>%
+  distinct(person, .keep_all = T)
+
+a = sqldf("SELECT nurse, COUNT() as number
+       FROM nurse_meds
+       GROUP BY nurse")
+
+
+dep_hosp = all_depressed %>%
+  inner_join(hosp, by = "person") %>%
+  distinct(person, .keep_all = T)
+```
 
 
 
