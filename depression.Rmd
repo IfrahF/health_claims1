@@ -305,7 +305,7 @@ all_depressed %>%
                 ifelse(grepl("F9", icd10), "Behavioral and emotional disorders with onset usually occurring in childhood and adolescence", "NA"))))))))))
 
 all_depressed = all_depressed %>%
-  filter(illness == "Mood (affective) disorders") %>%
+  # filter(illness == "Mood (affective) disorders") %>%
   distinct(person, .keep_all = T)
 
 check_nurses = all_depressed %>%
@@ -314,6 +314,7 @@ check_nurses = all_depressed %>%
 sqldf("SELECT nurse, COUNT()
        FROM check_nurses
        GROUP BY nurse")
+
 
 check_nurses = rx_2020 %>%
   filter(class == 'ANTIDEPRESSANTS') %>%
@@ -357,8 +358,26 @@ dep_hosp = all_depressed %>%
   distinct(person, .keep_all = T)
 ```
 
+## People not diagnosed with depression but on anti-depression medication:
+```{r}
+hallway = sqldf("SELECT person, days 
+                 FROM check_nurses 
+                 WHERE Person NOT IN
+                 (SELECT Person
+                  FROM all_depressed)")
+
+hallway = hallway %>%
+  inner_join(med_2020, by = "person") %>%
+  distinct(person, .keep_all = T)
 
 
+sqldf("SELECT COUNT(DISTINCT(person))
+      FROM rx_2020")
+
+sqldf("SELECT COUNT(DISTINCT(person)), rel_code
+      FROM rx_2020
+      GROUP BY rel_code")
+```
 
 
 
