@@ -305,7 +305,7 @@ all_depressed %>%
                 ifelse(grepl("F9", icd10), "Behavioral and emotional disorders with onset usually occurring in childhood and adolescence", "NA"))))))))))
 
 all_depressed = all_depressed %>%
-  # filter(illness == "Mood (affective) disorders") %>%
+  filter(illness == "Mood (affective) disorders") %>%
   distinct(person, .keep_all = T)
 
 check_nurses = all_depressed %>%
@@ -371,13 +371,65 @@ hallway = hallway %>%
   distinct(person, .keep_all = T)
 
 
-sqldf("SELECT COUNT(DISTINCT(person))
-      FROM rx_2020")
+sqldf("SELECT COUNT(icd10) AS freq, icd10
+      FROM hallway
+      GROUP BY icd10
+      ORDER BY freq DESC")
 
 sqldf("SELECT COUNT(DISTINCT(person)), rel_code
       FROM rx_2020
       GROUP BY rel_code")
 ```
 
+```{r}
+cancer = med_2020 %>%
+  group_by(person, from, to) %>% 
+  mutate(sum_cost = sum(cost)) %>% 
+  filter(sum_cost > 0) %>% 
+  ungroup() %>%
+  filter(str_detect(icd10, c("^C", "Z12.31", "Z12.4"))) %>%
+  filter(!str_detect(icd10, "^C3"))
 
+can_dep = check_nurses %>%
+  inner_join(cancer, by = "person") %>%
+  distinct(person, .keep_all = T)
+```
+
+```{r}
+dep = sqldf("SELECT Person, SUM(Days) AS supply
+       FROM rx_2020
+       WHERE class == 'ANTIDEPRESSANTS'
+       GROUP BY Person
+       HAVING supply >= 180")
+
+dep = dep %>%
+  inner_join(rx_2020, by = "person") %>%
+  distinct(person, .keep_all = T)
+
+sqldf("SELECT COUNT(Person) AS freq, rel_code
+       FROM dep
+       GROUP BY rel_code")
+
+sqldf("SELECT COUNT(Person) AS freq, gender
+       FROM dep
+       GROUP BY gender")
+```
+
+```{r}
+med = med_2020 %>%
+  group_by(person, from, to) %>% 
+  mutate(sum_cost = sum(cost)) %>% 
+  filter(sum_cost > 0) %>% 
+  distinct(person, from, .keep_all = T)
+
+visits = sqldf("SELECT person, `from` 
+                 FROM med 
+                 WHERE person IN
+                 (SELECT person
+                  FROM all_depressed)")
+
+a = sqldf("SELECT DISTINCT person, `from` 
+         FROM med 
+         WHERE relcode == 'E'")
+```
 
