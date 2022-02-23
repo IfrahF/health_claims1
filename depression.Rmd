@@ -305,7 +305,7 @@ all_depressed %>%
                 ifelse(grepl("F9", icd10), "Behavioral and emotional disorders with onset usually occurring in childhood and adolescence", "NA"))))))))))
 
 all_depressed = all_depressed %>%
-  filter(illness == "Mood (affective) disorders") %>%
+  #filter(illness == "Mood (affective) disorders") %>%
   distinct(person, .keep_all = T)
 
 check_nurses = all_depressed %>%
@@ -406,9 +406,9 @@ dep = dep %>%
   inner_join(rx_2020, by = "person") %>%
   distinct(person, .keep_all = T)
 
-sqldf("SELECT COUNT(Person) AS freq, rel_code
-       FROM dep
-       GROUP BY rel_code")
+sqldf("SELECT COUNT(Person) AS freq, relcode
+       FROM all_depressed
+       GROUP BY relcode")
 
 sqldf("SELECT COUNT(Person) AS freq, gender
        FROM dep
@@ -428,8 +428,69 @@ visits = sqldf("SELECT person, `from`
                  (SELECT person
                   FROM all_depressed)")
 
+visits = sqldf("SELECT COUNT(person) AS visit, person
+                 FROM visits 
+                 GROUP BY person")
+
 a = sqldf("SELECT DISTINCT person, `from` 
          FROM med 
          WHERE relcode == 'E'")
+
+visits = visits %>%
+  inner_join(rx_2020, by = "person") %>%
+  distinct(person, .keep_all = T)
+
+sqldf("SELECT SUM(visit) AS visit, rel_code
+       FROM visits 
+       GROUP BY rel_code")
 ```
+
+
+```{r}
+chronic = dep %>%
+  inner_join(rx_2020, by = "person") %>%
+  janitor::clean_names() 
+
+sqldf("SELECT COUNT(DISTINCT(person)) AS people, class_x
+       FROM chronic 
+       GROUP BY class_x
+       ORDER BY people")
+
+
+chronic = sqldf("SELECT Person, class, SUM(Days) AS supply
+       FROM rx_2020
+       GROUP BY Person
+       HAVING supply >= 180")
+
+chronic = chronic %>%
+  filter(class == "ANTIDEPRESSANTS")
+```
+
+
+```{r}
+abc = risk  %>%
+  inner_join(rx_2020, by = "person") %>%
+  filter(class == "ANTIDEPRESSANTS") %>%
+  mutate(diabetes = ifelse(diabetes == "Y", 1, 0)) %>%
+  mutate(lung = ifelse(lung == "Y", 1, 0)) %>%
+  mutate(heart = ifelse(heart == "Y", 1, 0)) %>%
+  mutate(hyper = ifelse(hyper == "Y", 1, 0)) %>%
+  mutate(cancer = ifelse(cancer == "Y", 1, 0)) %>%
+  mutate(lipid = ifelse(lipid == "Y", 1, 0)) %>%
+  filter(rel_code.x == "E")
+
+sqldf("SELECT COUNT(DISTINCT(person))
+      FROM abc
+      WHERE heart == 1")
+
+# disease   All   E     Total
+# diabetes  35    23    50
+# lung      7     4     11   
+# hyper     102   74    207
+# cancer    1     1     5
+# lipid     117   93    280
+# heart     26    17    32
+```
+
+
 
