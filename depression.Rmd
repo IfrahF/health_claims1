@@ -493,4 +493,14 @@ sqldf("SELECT COUNT(DISTINCT(person))
 ```
 
 
+```{r}
+sqldf("SELECT rel_code, COUNT(DISTINCT(person)) AS people
+       FROM rx_2020
+       WHERE class == 'ANTIDEPRESSANTS'
+       GROUP BY rel_code")
+
+# C 34  178 = 19.10%
+# E 150 466 = 32.19%
+# S 46  176 = 26.13%
+```
 
